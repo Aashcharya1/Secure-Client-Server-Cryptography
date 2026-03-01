@@ -66,14 +66,30 @@ void cleanupWinsock() {
 }
 
 KeyIV performDHKeyExchange(int sock) {
+    // 1. Receive P parameter
+    uint32_t net_p_len;
+    recvAll(sock, (char*)&net_p_len, sizeof(net_p_len));
+    int p_len = ntohl(net_p_len);
+    std::vector<unsigned char> p_bytes(p_len);
+    recvAll(sock, (char*)p_bytes.data(), p_len);
+    BIGNUM* p = BN_bin2bn(p_bytes.data(), p_len, NULL);
+
+    // 2. Receive G parameter
+    uint32_t net_g_len;
+    recvAll(sock, (char*)&net_g_len, sizeof(net_g_len));
+    int g_len = ntohl(net_g_len);
+    std::vector<unsigned char> g_bytes(g_len);
+    recvAll(sock, (char*)g_bytes.data(), g_len);
+    BIGNUM* g = BN_bin2bn(g_bytes.data(), g_len, NULL);
+
+    // Apply exact same params to Sender
     DH* dh = DH_new();
-    DH_generate_parameters_ex(dh, 2048, DH_GENERATOR_2, NULL);
+    DH_set0_pqg(dh, p, NULL, g);
     DH_generate_key(dh);
-    
+
     const BIGNUM *pub_key, *priv_key;
     DH_get0_key(dh, &pub_key, &priv_key);
-    
-    // Rubric Requirement: Show private/public components
+
     char* pub_hex = BN_bn2hex(pub_key);
     char* priv_hex = BN_bn2hex(priv_key);
     std::cout << "--- DH Key Generation ---" << std::endl;
@@ -81,31 +97,30 @@ KeyIV performDHKeyExchange(int sock) {
     std::cout << "Sender Public Key:  " << pub_hex << std::endl << std::endl;
     OPENSSL_free(pub_hex);
     OPENSSL_free(priv_hex);
-    
+
+    // 3. Receive Receiver's Public Key
     uint32_t receiver_pub_key_len;
     recvAll(sock, (char*)&receiver_pub_key_len, sizeof(receiver_pub_key_len));
     receiver_pub_key_len = ntohl(receiver_pub_key_len);
-    
     std::vector<unsigned char> receiver_pub_key_bytes(receiver_pub_key_len);
     recvAll(sock, (char*)receiver_pub_key_bytes.data(), receiver_pub_key_len);
-    
     BIGNUM* receiver_pub_key = BN_bin2bn(receiver_pub_key_bytes.data(), receiver_pub_key_len, NULL);
-    
+
+    // 4. Send our Public Key
     int pub_key_len = BN_num_bytes(pub_key);
     std::vector<unsigned char> pub_key_bytes(pub_key_len);
     BN_bn2bin(pub_key, pub_key_bytes.data());
-    
     uint32_t len = htonl(pub_key_len);
     send(sock, (char*)&len, sizeof(len), 0);
     send(sock, (char*)pub_key_bytes.data(), pub_key_len, 0);
-    
+
+    // Compute Secret
     std::vector<unsigned char> shared_secret(DH_size(dh));
     int secret_len = DH_compute_key(shared_secret.data(), receiver_pub_key, dh);
     shared_secret.resize(secret_len);
-    
-    // Rubric Requirement: Show shared secret
+
     printHex("Derived Shared Secret", shared_secret);
-    
+
     std::vector<unsigned char> aes_key(16), iv(16);
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
@@ -114,13 +129,13 @@ KeyIV performDHKeyExchange(int sock) {
     unsigned int hash_len;
     EVP_DigestFinal_ex(mdctx, hash, &hash_len);
     EVP_MD_CTX_free(mdctx);
-    
+
     memcpy(aes_key.data(), hash, 16);
     memcpy(iv.data(), hash + 16, 16);
-    
+
     BN_free(receiver_pub_key);
     DH_free(dh);
-    
+
     std::cout << "Diffie-Hellman key exchange completed successfully.\n" << std::endl;
     return {aes_key, iv};
 }
@@ -227,15 +242,28 @@ int main(int argc, char* argv[]) {
             sendFile(sock, argv[2], keyiv.key, keyiv.iv);
         }
     } else {
-        std::string input, arg;
-        std::cout << "Enter command (msg [text] OR file [name] OR exit): ";
-        std::cin >> input;
-        if (input == "msg") {
-            std::getline(std::cin >> std::ws, arg);
-            sendMessage(sock, arg, keyiv.key, keyiv.iv);
-        } else if (input == "file") {
-            std::cin >> arg;
-            sendFile(sock, arg, keyiv.key, keyiv.iv);
+        std::cout << "Usage: sender_b msg <message> or sender_b file <filename>" << std::endl;
+        while (true) {
+            std::cout << "\nEnter command (msg/file/exit): ";
+            std::string cmd;
+            std::cin >> cmd;
+            
+            if (cmd == "msg") {
+                std::cout << "Enter message: ";
+                std::string msg;
+                std::cin.ignore();
+                std::getline(std::cin, msg);
+                sendMessage(sock, msg, keyiv.key, keyiv.iv);
+            }
+            else if (cmd == "file") {
+                std::cout << "Enter filename: ";
+                std::string filename;
+                std::cin >> filename;
+                sendFile(sock, filename, keyiv.key, keyiv.iv);
+            }
+            else if (cmd == "exit" || cmd == "EXIT") {
+                break;
+            }
         }
     }
     

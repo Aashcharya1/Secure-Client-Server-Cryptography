@@ -70,15 +70,14 @@ void cleanupWinsock() {
 
 KeyIV performDHKeyExchange(int sock) {
     DH* dh = DH_new();
-    if (DH_generate_parameters_ex(dh, 2048, DH_GENERATOR_2, NULL) != 1 || DH_generate_key(dh) != 1) {
-        std::cerr << "Error generating DH parameters/keys" << std::endl;
-        exit(1);
-    }
-    
-    const BIGNUM *pub_key, *priv_key;
+    std::cout << "Generating DH parameters (this may take a moment)..." << std::endl;
+    DH_generate_parameters_ex(dh, 2048, DH_GENERATOR_2, NULL);
+    DH_generate_key(dh);
+
+    const BIGNUM *pub_key, *priv_key, *p, *q, *g;
     DH_get0_key(dh, &pub_key, &priv_key);
-    
-    // Rubric Requirement: Show private/public components
+    DH_get0_pqg(dh, &p, &q, &g);
+
     char* pub_hex = BN_bn2hex(pub_key);
     char* priv_hex = BN_bn2hex(priv_key);
     std::cout << "--- DH Key Generation ---" << std::endl;
@@ -87,30 +86,45 @@ KeyIV performDHKeyExchange(int sock) {
     OPENSSL_free(pub_hex);
     OPENSSL_free(priv_hex);
 
+    // 1. Send P parameter
+    int p_len = BN_num_bytes(p);
+    std::vector<unsigned char> p_bytes(p_len);
+    BN_bn2bin(p, p_bytes.data());
+    uint32_t net_p_len = htonl(p_len);
+    send(sock, (char*)&net_p_len, sizeof(net_p_len), 0);
+    send(sock, (char*)p_bytes.data(), p_len, 0);
+
+    // 2. Send G parameter
+    int g_len = BN_num_bytes(g);
+    std::vector<unsigned char> g_bytes(g_len);
+    BN_bn2bin(g, g_bytes.data());
+    uint32_t net_g_len = htonl(g_len);
+    send(sock, (char*)&net_g_len, sizeof(net_g_len), 0);
+    send(sock, (char*)g_bytes.data(), g_len, 0);
+
+    // 3. Send Receiver Public Key
     int pub_key_len = BN_num_bytes(pub_key);
     std::vector<unsigned char> pub_key_bytes(pub_key_len);
     BN_bn2bin(pub_key, pub_key_bytes.data());
-    
     uint32_t len = htonl(pub_key_len);
     send(sock, (char*)&len, sizeof(len), 0);
     send(sock, (char*)pub_key_bytes.data(), pub_key_len, 0);
-    
+
+    // 4. Receive Sender's Public Key
     uint32_t sender_pub_key_len;
     recvAll(sock, (char*)&sender_pub_key_len, sizeof(sender_pub_key_len));
     sender_pub_key_len = ntohl(sender_pub_key_len);
-    
     std::vector<unsigned char> sender_pub_key_bytes(sender_pub_key_len);
     recvAll(sock, (char*)sender_pub_key_bytes.data(), sender_pub_key_len);
-    
     BIGNUM* sender_pub_key = BN_bin2bn(sender_pub_key_bytes.data(), sender_pub_key_len, NULL);
-    
+
+    // Compute Secret
     std::vector<unsigned char> shared_secret(DH_size(dh));
     int secret_len = DH_compute_key(shared_secret.data(), sender_pub_key, dh);
     shared_secret.resize(secret_len);
-    
-    // Rubric Requirement: Show shared secret
+
     printHex("Derived Shared Secret", shared_secret);
-    
+
     std::vector<unsigned char> aes_key(16), iv(16);
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
@@ -119,15 +133,14 @@ KeyIV performDHKeyExchange(int sock) {
     unsigned int hash_len;
     EVP_DigestFinal_ex(mdctx, hash, &hash_len);
     EVP_MD_CTX_free(mdctx);
-    
+
     memcpy(aes_key.data(), hash, 16);
     memcpy(iv.data(), hash + 16, 16);
-    
+
     BN_free(sender_pub_key);
     DH_free(dh);
-    
+
     std::cout << "Diffie-Hellman key exchange completed successfully.\n" << std::endl;
-    
     return {aes_key, iv};
 }
 

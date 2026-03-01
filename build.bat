@@ -16,13 +16,13 @@ g++ -std=c++11 -Wall -O2 -o receiver_a.exe receiver.cpp -lws2_32 -lssl -lcrypto
 
 REM Build Experiment B
 echo Building Experiment B...
-g++ -std=c++11 -Wall -O2 -o sender_b.exe senderB.cpp -lws2_32 -lssl -lcrypto
-g++ -std=c++11 -Wall -O2 -o receiver_b.exe receiverB.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -O2 -o sender_b.exe sender_b.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -O2 -o receiver_b.exe receiver_b.cpp -lws2_32 -lssl -lcrypto
 
 REM Build Experiment C
 echo Building Experiment C...
-g++ -std=c++11 -Wall -O2 -o sender_c.exe senderC.cpp -lws2_32 -lssl -lcrypto
-g++ -std=c++11 -Wall -O2 -o receiver_c.exe receiverC.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -O2 -o sender_c.exe sender_c.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -O2 -o receiver_c.exe receiver_c.cpp -lws2_32 -lssl -lcrypto
 
 REM Build performance test
 echo Building performance test...

@@ -206,15 +206,28 @@ int main(int argc, char* argv[]) {
             sendFile(sock, argv[2], pkey);
         }
     } else {
-        std::string input, arg;
-        std::cout << "Enter command (msg [text] OR file [name] OR exit): ";
-        std::cin >> input;
-        if (input == "msg") {
-            std::getline(std::cin >> std::ws, arg);
-            sendMessage(sock, arg, pkey);
-        } else if (input == "file") {
-            std::cin >> arg;
-            sendFile(sock, arg, pkey);
+        std::cout << "Usage: sender_c msg <message> or sender_c file <filename>" << std::endl;
+        while (true) {
+            std::cout << "\nEnter command (msg/file/exit): ";
+            std::string cmd;
+            std::cin >> cmd;
+            
+            if (cmd == "msg") {
+                std::cout << "Enter message: ";
+                std::string msg;
+                std::cin.ignore();
+                std::getline(std::cin, msg);
+                sendMessage(sock, msg, pkey);
+            }
+            else if (cmd == "file") {
+                std::cout << "Enter filename: ";
+                std::string filename;
+                std::cin >> filename;
+                sendFile(sock, filename, pkey);
+            }
+            else if (cmd == "exit" || cmd == "EXIT") {
+                break;
+            }
         }
     }
     

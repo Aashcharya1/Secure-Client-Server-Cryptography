@@ -61,35 +61,54 @@ void cleanupWinsock() {
 }
 
 // --- Cryptography Functions ---
+
+// UPDATED: Syncs P and G parameters with the receiver!
 KeyIV performDHKeyExchange(int sock) {
+    // 1. Receive P parameter
+    uint32_t net_p_len;
+    if (!recvAll(sock, (char*)&net_p_len, sizeof(net_p_len))) return {};
+    int p_len = ntohl(net_p_len);
+    std::vector<unsigned char> p_bytes(p_len);
+    recvAll(sock, (char*)p_bytes.data(), p_len);
+    BIGNUM* p = BN_bin2bn(p_bytes.data(), p_len, NULL);
+
+    // 2. Receive G parameter
+    uint32_t net_g_len;
+    recvAll(sock, (char*)&net_g_len, sizeof(net_g_len));
+    int g_len = ntohl(net_g_len);
+    std::vector<unsigned char> g_bytes(g_len);
+    recvAll(sock, (char*)g_bytes.data(), g_len);
+    BIGNUM* g = BN_bin2bn(g_bytes.data(), g_len, NULL);
+
+    // Apply exact same params to Sender
     DH* dh = DH_new();
-    DH_generate_parameters_ex(dh, 2048, DH_GENERATOR_2, NULL);
+    DH_set0_pqg(dh, p, NULL, g);
     DH_generate_key(dh);
-    
+
     const BIGNUM *pub_key;
     DH_get0_key(dh, &pub_key, NULL);
-    
+
+    // 3. Receive Receiver's Public Key
     uint32_t receiver_pub_key_len;
     recvAll(sock, (char*)&receiver_pub_key_len, sizeof(receiver_pub_key_len));
     receiver_pub_key_len = ntohl(receiver_pub_key_len);
-    
     std::vector<unsigned char> receiver_pub_key_bytes(receiver_pub_key_len);
     recvAll(sock, (char*)receiver_pub_key_bytes.data(), receiver_pub_key_len);
-    
     BIGNUM* receiver_pub_key = BN_bin2bn(receiver_pub_key_bytes.data(), receiver_pub_key_len, NULL);
-    
+
+    // 4. Send our Public Key
     int pub_key_len = BN_num_bytes(pub_key);
     std::vector<unsigned char> pub_key_bytes(pub_key_len);
     BN_bn2bin(pub_key, pub_key_bytes.data());
-    
     uint32_t len = htonl(pub_key_len);
     send(sock, (char*)&len, sizeof(len), 0);
     send(sock, (char*)pub_key_bytes.data(), pub_key_len, 0);
-    
+
+    // Compute Secret
     std::vector<unsigned char> shared_secret(DH_size(dh));
     int secret_len = DH_compute_key(shared_secret.data(), receiver_pub_key, dh);
     shared_secret.resize(secret_len);
-    
+
     std::vector<unsigned char> aes_key(16), iv(16);
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
@@ -98,12 +117,13 @@ KeyIV performDHKeyExchange(int sock) {
     unsigned int hash_len;
     EVP_DigestFinal_ex(mdctx, hash, &hash_len);
     EVP_MD_CTX_free(mdctx);
-    
+
     memcpy(aes_key.data(), hash, 16);
     memcpy(iv.data(), hash + 16, 16);
-    
+
     BN_free(receiver_pub_key);
     DH_free(dh);
+    
     return {aes_key, iv};
 }
 
@@ -163,11 +183,16 @@ std::vector<double> testAES(const std::vector<unsigned char>& file_data, int num
     inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
     
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "AES connection failed. Is receiverB.exe running?" << std::endl;
+        std::cerr << "AES connection failed. Is receiver_b.exe running on port " << PORT_AES << "?" << std::endl;
         return times;
     }
     
     KeyIV keyiv = performDHKeyExchange(sock);
+    if (keyiv.key.empty()) {
+        std::cerr << "DH Key Exchange failed in testAES" << std::endl;
+        return times;
+    }
+
     std::string command = "FILE NAME:aes_bench.bin SIZE:" + std::to_string(file_data.size()) + "\n";
     std::vector<unsigned char> cmd_bytes(command.begin(), command.end());
     
@@ -226,7 +251,7 @@ std::vector<double> testRSA(const std::vector<unsigned char>& file_data, int num
     inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
     
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "RSA connection failed. Is receiverC.exe running?" << std::endl;
+        std::cerr << "RSA connection failed. Is receiver_c.exe running on port " << PORT_RSA << "?" << std::endl;
         EVP_PKEY_free(pkey);
         return times;
     }
@@ -273,22 +298,24 @@ std::vector<double> testRSA(const std::vector<unsigned char>& file_data, int num
     return times;
 }
 
-void createDummyFile(const std::string& filename) {
-    std::ofstream out(filename, std::ios::binary);
-    std::vector<char> data(1024, 'A'); // Exact 1KB dummy file
-    out.write(data.data(), data.size());
-    out.close();
-    std::cout << "Created dummy 1KB file: " << filename << std::endl;
-}
-
 int main(int argc, char* argv[]) {
     initializeWinsock();
     
-    std::string filename = "dummy_1kb.txt";
-    createDummyFile(filename);
-    int num_runs = 100;
+    if (argc < 2) {
+        std::cerr << "Usage: test_performance.exe <filename> [num_runs]" << std::endl;
+        std::cerr << "Example: test_performance.exe test_1kb.bin 100" << std::endl;
+        cleanupWinsock();
+        return 1;
+    }
+    
+    std::string filename = argv[1];
+    int num_runs = (argc > 2) ? std::stoi(argv[2]) : 100;
     
     std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot open " << filename << ". Run generate_test_file.exe first." << std::endl;
+        return 1;
+    }
     size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
     std::vector<unsigned char> file_data(file_size);
@@ -298,6 +325,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting AES Benchmark (" << num_runs << " runs)..." << std::endl;
     std::vector<double> aes_times = testAES(file_data, num_runs);
     
+    if (aes_times.empty()) {
+        std::cerr << "AES Benchmark failed. Skipping to RSA..." << std::endl;
+    }
+    
     std::cout << "Starting RSA Benchmark (" << num_runs << " runs)..." << std::endl;
     std::vector<double> rsa_times = testRSA(file_data, num_runs);
     
@@ -306,11 +337,12 @@ int main(int argc, char* argv[]) {
         results_file << "Run,AES_Time_ms,RSA_Time_ms\n";
         for (int i = 0; i < num_runs; i++) {
             results_file << (i + 1) << "," << aes_times[i] << "," << rsa_times[i] << "\n";
+            std::cout << "Run " << (i + 1) << " - AES: " << aes_times[i] << " ms | RSA: " << rsa_times[i] << " ms\n";
         }
         results_file.close();
         std::cout << "\nSuccess! Results saved to performance_results.csv" << std::endl;
     } else {
-        std::cerr << "\nError: Benchmark did not complete all runs. Check your receivers." << std::endl;
+        std::cerr << "\nError: Benchmark did not complete successfully." << std::endl;
     }
     
     cleanupWinsock();
