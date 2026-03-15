@@ -11,22 +11,22 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Build Experiment A
 echo Building Experiment A...
-g++ -std=c++11 -Wall -O2 -o sender_a.exe sender.cpp -lws2_32 -lssl -lcrypto
-g++ -std=c++11 -Wall -O2 -o receiver_a.exe receiver.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o sender_a.exe sender_a.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o receiver_a.exe receiver_a.cpp -lws2_32 -lssl -lcrypto
 
 REM Build Experiment B
 echo Building Experiment B...
-g++ -std=c++11 -Wall -O2 -o sender_b.exe sender_b.cpp -lws2_32 -lssl -lcrypto
-g++ -std=c++11 -Wall -O2 -o receiver_b.exe receiver_b.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o sender_b.exe sender_b.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o receiver_b.exe receiver_b.cpp -lws2_32 -lssl -lcrypto
 
 REM Build Experiment C
 echo Building Experiment C...
-g++ -std=c++11 -Wall -O2 -o sender_c.exe sender_c.cpp -lws2_32 -lssl -lcrypto
-g++ -std=c++11 -Wall -O2 -o receiver_c.exe receiver_c.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o sender_c.exe sender_c.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o receiver_c.exe receiver_c.cpp -lws2_32 -lssl -lcrypto
 
 REM Build performance test
 echo Building performance test...
-g++ -std=c++11 -Wall -O2 -o test_performance.exe test_performance.cpp -lws2_32 -lssl -lcrypto
+g++ -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2 -o test_performance.exe test_performance.cpp -lws2_32 -lssl -lcrypto
 
 REM Build test file generator
 echo Building test file generator...

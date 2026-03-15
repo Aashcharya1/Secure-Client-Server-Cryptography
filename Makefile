@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -O2
+CXXFLAGS = -std=c++11 -Wall -Wno-deprecated-declarations -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-sign-compare -O2
 OPENSSL_FLAGS = -lssl -lcrypto
 
 # Windows-specific flags
@@ -10,25 +10,25 @@ else
 endif
 
 # Experiment A (Basic TCP)
-sender_a: sender.cpp
-	$(CXX) $(CXXFLAGS) -o sender_a.exe sender.cpp $(LDFLAGS)
+sender_a: sender_a.cpp
+	$(CXX) $(CXXFLAGS) -o sender_a.exe sender_a.cpp $(LDFLAGS)
 
-receiver_a: receiver.cpp
-	$(CXX) $(CXXFLAGS) -o receiver_a.exe receiver.cpp $(LDFLAGS)
+receiver_a: receiver_a.cpp
+	$(CXX) $(CXXFLAGS) -o receiver_a.exe receiver_a.cpp $(LDFLAGS)
 
 # Experiment B (DH + AES)
-sender_b: senderB.cpp
-	$(CXX) $(CXXFLAGS) -o sender_b.exe senderB.cpp $(LDFLAGS)
+sender_b: sender_b.cpp
+	$(CXX) $(CXXFLAGS) -o sender_b.exe sender_b.cpp $(LDFLAGS)
 
-receiver_b: receiverB.cpp
-	$(CXX) $(CXXFLAGS) -o receiver_b.exe receiverB.cpp $(LDFLAGS)
+receiver_b: receiver_b.cpp
+	$(CXX) $(CXXFLAGS) -o receiver_b.exe receiver_b.cpp $(LDFLAGS)
 
 # Experiment C (RSA)
-sender_c: senderC.cpp
-	$(CXX) $(CXXFLAGS) -o sender_c.exe senderC.cpp $(LDFLAGS)
+sender_c: sender_c.cpp
+	$(CXX) $(CXXFLAGS) -o sender_c.exe sender_c.cpp $(LDFLAGS)
 
-receiver_c: receiverC.cpp
-	$(CXX) $(CXXFLAGS) -o receiver_c.exe receiverC.cpp $(LDFLAGS)
+receiver_c: receiver_c.cpp
+	$(CXX) $(CXXFLAGS) -o receiver_c.exe receiver_c.cpp $(LDFLAGS)
 
 # Performance testing
 test_performance: test_performance.cpp
